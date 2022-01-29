@@ -15,11 +15,36 @@ class HashInterpolator(nn.Module):
         self.bit_table = torch.tensor(list(itertools.product([0,1],repeat=n_dim)))
         self.index_list = torch.repeat_interleave(torch.arange(n_dim)[None,:],2**n_dim,dim=0)
 
-    def findGrid(self,position):
+    def findGrid(self,*position):
         pass
 
-    def ndLinearInterpolation(self,corner_value,position):
+    def getData(self,lower_corner,data):
+        """
+        Get data using lower corner indices and data array.
+
+        Args:
+            lower_corner: A tensor of shape (batch_size, n_dim)
+            data: A tensor of shape (n_shape...)
+        Returns:
+            A tensor of shape (batch_size, n_dim)
+        """
+        corner_index = torch.repeat_interleave(lower_corner[:,None],2**self.n_dim,dim=1)+self.bit_table
+        corner_value = data[corner_index.chunk(self.n_dim,dim=-1)][...,0]
+        return corner_value
+
+
+    def ndLinearInterpolation(self,corner_value,position)->torch.tensor:
+        """
+        N dimensional linear interpolation.
+
+        Args:
+            corner_value: A tensor of shape (batch_size, 2**n_dim)
+            position: A tensor of shape (batch_size, n_dim)
+        Returns:
+            A tensor of shape (batch_size)
+        """
         coef_list = torch.stack([position,1-position],axis=-1)
+        print(corner_value.shape,coef_list.shape)
         result = corner_value*torch.prod(coef_list[:,self.index_list,self.bit_table],dim=2)
         return torch.sum(result,axis=1)
 
