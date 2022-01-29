@@ -1,11 +1,23 @@
 from numpy import int64, uint32
 import torch
 import torch.nn as nn
+import numpy as np
 import itertools
 
 large_prime = [1, 19349663, 83492791, 48397621]
 
 class HashedInterpolator(nn.Module):
+    """
+    Single level Hashed interpolator.
+
+    Args:
+        n_dim: Dimension of the input space.
+        n_entries: Number of entries in the hash table.
+        n_feature: Number of features.
+        grids: The input size of the object. (n_1, n_2, ..., n_dim)
+
+    """
+
     def __init__(self, n_dim: int, n_entries: int, n_feature: int, grids: torch.tensor):
         super().__init__()
         self.n_dim = n_dim
@@ -80,3 +92,13 @@ class HashedInterpolator(nn.Module):
         corner_value = self.getData(lower_corner)
         result = torch.stack([self.ndLinearInterpolation(corner_value[...,i],position) for i in range(self.n_feature)],axis=-1)
         return result
+
+class MLP(nn.Module):
+    def __init__(self, n_input: int, n_output: int, n_hidden: int, n_layers: int, act = nn.ReLU()):
+        super().__init__()
+        layers = np.array([nn.Linear(n_hidden, n_hidden) for i in range(n_layers)])
+        layers = np.insert(layers,np.arange(1,n_layers+1),act)
+        self.output = nn.Sequential(nn.Linear(n_input, n_hidden), act, *layers, nn.Linear(n_hidden, n_output))
+
+    def forward(self, x):
+        return self.output(x)
