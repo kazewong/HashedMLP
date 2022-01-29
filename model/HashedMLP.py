@@ -102,3 +102,16 @@ class MLP(nn.Module):
 
     def forward(self, x):
         return self.output(x)
+
+class HashedMLP(nn.Module):
+    def __init__(self, n_input: int, n_output: int, n_hidden: int, n_layers: int,
+                    n_entries: int, n_feature: int, base_grids: torch.tensor, 
+                    n_level: int, n_factor: float, n_auxin:int=0, act = nn.ReLU()):
+        super().__init__()
+        self.level = n_level
+        self.interpolator = [HashedInterpolator(n_input, n_entries, n_feature,base_grids*n_factor**i) for i in range(n_level)]
+        self.MLP = MLP(n_feature*n_level+n_auxin, n_output, n_hidden, n_layers, act)
+
+    def forward(self, x):
+        x = torch.concat([self.interpolator[i](x) for i in range(self.level)],dim=1)
+        return self.MLP(x)
