@@ -4,7 +4,7 @@ import torch.nn as nn
 import numpy as np
 import itertools
 
-large_prime = [1, 19349663, 83492791, 48397621]
+
 
 class HashedInterpolator(nn.Module):
     """
@@ -18,15 +18,17 @@ class HashedInterpolator(nn.Module):
 
     """
 
-    def __init__(self, n_dim: int, n_entries: int, n_feature: int, grids: torch.tensor):
+    def __init__(self, n_dim: int, n_entries: int, n_feature: int, grids: torch.tensor,device='cuda'):
         super().__init__()
         self.n_dim = n_dim
         self.n_entries = n_entries
         self.n_feature = n_feature
         self.grids = grids
-        self.hash_table = nn.Parameter((torch.rand(n_entries,n_feature)-0.5)*2e-4)
-        self.bit_table = torch.tensor(list(itertools.product([0,1],repeat=n_dim)))
-        self.index_list = torch.repeat_interleave(torch.arange(n_dim)[None,:],2**n_dim,dim=0)
+        self.device = device
+        self.large_prime = torch.tensor([1, 19349663, 83492791, 48397621]).to(device)
+        self.register_parameter(name='hash_table',param=nn.Parameter(((torch.rand(n_entries,n_feature)-0.5)*2e-4).to(device)))
+        self.bit_table = torch.tensor(list(itertools.product([0,1],repeat=n_dim))).to(device)
+        self.index_list = torch.repeat_interleave(torch.arange(n_dim)[None,:],2**n_dim,dim=0).to(device)
 
     def findGrid(self,position):
         """
@@ -82,9 +84,9 @@ class HashedInterpolator(nn.Module):
             A tensor of shape (batch_size)
 
         """
-        hash = torch.zeros(index.shape[:-1],dtype=torch.int32)
+        hash = torch.zeros(index.shape[:-1],dtype=torch.int32).to(self.device)
         for i in range(self.n_dim):
-            hash = torch.bitwise_xor(hash,index[...,i]*large_prime[i]) % self.n_entries
+            hash = torch.bitwise_xor(hash,index[...,i]*self.large_prime[i]) % self.n_entries
         return hash
 
     def forward(self, position: torch.tensor) -> torch.tensor:
@@ -109,7 +111,7 @@ class HashedMLP(nn.Module):
                     n_level: int, n_factor: float, n_auxin:int=0, act = nn.ReLU()):
         super().__init__()
         self.level = n_level
-        self.interpolator = [HashedInterpolator(n_input, n_entries, n_feature,base_grids*n_factor**i) for i in range(n_level)]
+        self.interpolator = nn.ModuleList([HashedInterpolator(n_input, n_entries, n_feature,base_grids*n_factor**i) for i in range(n_level)])
         self.MLP = MLP(n_feature*n_level+n_auxin, n_output, n_hidden, n_layers, act)
 
     def forward(self, x):
