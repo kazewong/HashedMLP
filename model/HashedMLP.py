@@ -60,7 +60,7 @@ class HashedInterpolator(nn.Module):
         return corner_value
 
 
-    def ndLinearInterpolation(self,corner_value,position)->torch.tensor:
+    def ndLinearInterpolation(self,lower_corner,corner_value,position)->torch.tensor:
         """
         N dimensional linear interpolation.
 
@@ -70,7 +70,10 @@ class HashedInterpolator(nn.Module):
         Returns:
             A tensor of shape (batch_size)
         """
-        coef_list = torch.stack([position,1-position],axis=-1)
+        lower_limit = lower_corner/self.grids
+        upper_limit = (lower_corner+1)/self.grids
+        size = (upper_limit - lower_limit)[0]
+        coef_list = torch.stack([(position-lower_limit)/size,(upper_limit-position)/size],axis=-1)
         result = corner_value*torch.prod(coef_list[:,self.index_list,self.bit_table],dim=2)
         return torch.sum(result,axis=1)
 
@@ -92,7 +95,7 @@ class HashedInterpolator(nn.Module):
     def forward(self, position: torch.tensor) -> torch.tensor:
         lower_corner = self.findGrid(position)
         corner_value = self.getData(lower_corner)
-        result = torch.stack([self.ndLinearInterpolation(corner_value[...,i],position) for i in range(self.n_feature)],axis=-1)
+        result = torch.stack([self.ndLinearInterpolation(lower_corner,corner_value[...,i],position) for i in range(self.n_feature)],axis=-1)
         return result
 
 class MLP(nn.Module):
