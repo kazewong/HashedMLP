@@ -22,15 +22,16 @@ position = torch.rand(100,3).cuda()
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 model.to(device)
+model = nn.DataParallel(model)
 
 learning_rate = 0.001
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, betas=(0.9,0.99), eps=1e-8,weight_decay=1e-4)
-batch_size = 100000
+batch_size = 1000000
 n_epoch = 1000
 n_check = 50
 loss = nn.MSELoss()
 
-stride = 2
+stride = 1
 data = np.load('./data/camel_compression_512.npz')['mass'][::stride,::stride,::stride][...,None]
 #data = torch.log10(1+torch.tensor(data)).float()
 data = torch.tensor(data).float()
@@ -47,23 +48,25 @@ data = torch.log10(1+data)
 scaler = StandardScaler()
 scaler.fit(data.detach().cpu().numpy())
 data = torch.tensor(scaler.transform(data.detach().cpu().numpy())).float()*255
+best_loss = 1e10
 
-
-weight = copy.deepcopy(model.interpolator[0].hash_table.detach().cpu().numpy())
-print(model.interpolator[0].hash_table.is_leaf)
+#weight = copy.deepcopy(model.interpolator[0].hash_table.detach().cpu().numpy())
+#print(model.interpolator[0].hash_table.is_leaf)
 for epoch in range(n_epoch):
     running_loss = 0.0
     for i in range(0,data.shape[0],batch_size):
         optimizer.zero_grad()
-        output = model(coord[i:i+batch_size].to(device))
+        output = model(coord[i:i+batch_size])
         loss_value = loss(output,data[i:i+batch_size].to(device))
         loss_value.backward()
         optimizer.step()
         running_loss += loss_value.item()
-        if i % (batch_size*n_check) == 0:
-            print('loss: %.3f' % (running_loss/n_check))
-            running_loss = 0.0
-    #print(loss_value)
+        if i == int(data.shape[0]/batch_size)*batch_size:
+            print('loss: %.3f' % (running_loss*batch_size/data.shape[0]))
+        if running_loss < best_loss:
+            best_loss = running_loss
+            torch.save(model.module.state_dict(), './checkpoint/camel_compression_512_best.pth')
+
 
 pred = []
 for i in range(0,data.shape[0],batch_size):
