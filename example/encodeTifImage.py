@@ -30,7 +30,7 @@ n_epoch = 1000
 n_check = 10
 loss = nn.MSELoss()
 
-data = torch.tensor(np.array(Image.open('/home/kaze/Work/HashedMLP/data/eso1625a.tif'))).float()[::10,::10]
+data = torch.tensor(np.array(Image.open('./data/eso1625a.tif'))).float()[::10,::10]
 original_shape = data.shape
 coord = torch.stack(torch.meshgrid(torch.arange(data.shape[0]),torch.arange(data.shape[1])),-1).float()
 coord[...,0] = coord[...,0]/data.shape[0]
