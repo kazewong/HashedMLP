@@ -20,15 +20,17 @@ class HashedInterpolator(nn.Module):
 
     def __init__(self, n_dim: int, n_entries: int, n_feature: int, grids: torch.tensor,device='cuda'):
         super().__init__()
-        self.n_dim = n_dim
-        self.n_entries = n_entries
-        self.n_feature = n_feature
-        self.grids = grids
+
         self.device = device
-        self.large_prime = torch.tensor([1, 19349663, 83492791, 48397621]).to(device)
-        self.register_parameter(name='hash_table',param=nn.Parameter(((torch.rand(n_entries,n_feature)-0.5)*2e-4).to(device)))
-        self.bit_table = torch.tensor(list(itertools.product([0,1],repeat=n_dim))).to(device)
-        self.index_list = torch.repeat_interleave(torch.arange(n_dim)[None,:],2**n_dim,dim=0).to(device)
+
+        self.register_parameter(name='hash_table',param=nn.Parameter(((torch.rand(n_entries,n_feature)-0.5)*2e-4)))
+        self.register_buffer(name='n_dim', tensor=torch.tensor(n_dim))
+        self.register_buffer(name='n_feature', tensor=torch.tensor(n_feature))
+        self.register_buffer(name='grids', tensor=grids)
+        self.register_buffer(name='n_entries', tensor=torch.tensor(n_entries))
+        self.register_buffer(name='bit_table', tensor=torch.tensor(list(itertools.product([0,1],repeat=n_dim))))
+        self.register_buffer(name='index_list', tensor=torch.repeat_interleave(torch.arange(n_dim)[None,:],2**n_dim,dim=0))
+        self.register_buffer(name='large_prime', tensor=torch.tensor([1, 19349663, 83492791, 48397621]))
 
     def findGrid(self,position):
         """
@@ -87,8 +89,8 @@ class HashedInterpolator(nn.Module):
             A tensor of shape (batch_size)
 
         """
-        hash = torch.zeros(index.shape[:-1],dtype=torch.int32).to(self.device)
-        for i in range(self.n_dim):
+        hash = torch.bitwise_xor(index[...,0]*self.large_prime[0],index[...,1]*self.large_prime[1]) % self.n_entries
+        for i in range(2,self.n_dim):
             hash = torch.bitwise_xor(hash,index[...,i]*self.large_prime[i]) % self.n_entries
         return hash
 
