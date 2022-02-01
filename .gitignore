@@ -132,3 +132,5 @@ data/
 plots/
 checkpoint/
 .vscode/settings.json
+
+runs/
