@@ -3,9 +3,10 @@ import torch
 import torch.nn as nn
 import numpy as np
 import itertools
-
-
-
+from argparse import ArgumentParser
+import pytorch_lightning as pl
+from pytorch_lightning.loggers import TensorBoardLogger
+from pytorch_lightning.callbacks import ModelCheckpoint
 class HashedInterpolator(nn.Module):
     """
     Single level Hashed interpolator.
@@ -122,3 +123,65 @@ class HashedMLP(nn.Module):
     def forward(self, x):
         x = torch.concat([self.interpolator[i](x) for i in range(self.level)],dim=1)
         return self.MLP(x)
+
+
+### Model in pytorch lightning
+
+class HashedInterpolator(pl.LightningModule):
+    
+    @staticmethod
+    def specific_args(parent_parser):
+        parser = ArgumentParser(parents=[parent_parser], add_help=False)
+        parser.add_argument('--n_layers', type=int)
+        parser.add_argument('--learning_rate', type=float)
+        parser.add_argument('--weight_decay', type=float,default=1e-4)
+        parser.add_argument('--step_size', type=float, default=1)
+        parser.add_argument('--gamma', type=float, default=0.5)
+        parser.add_argument('--n_input', type=int)
+        parser.add_argument('--n_output', type=int)
+        parser.add_argument('--n_hidden', type=int, default=64)
+        parser.add_argument('--n_layers', type=int, default=2)
+        parser.add_argument('--n_entries', type=int, default=2**20)
+        parser.add_argument('--n_feature', type=int, default=2)
+        parser.add_argument('--base_grids', type=torch.tensor, default= torch.tensor([16,16,16]))
+        parser.add_argument('--n_level', type=int, default=16)
+        parser.add_argument('--n_factor', type=float, default=1.5)
+        parser.add_argument('--n_auxin', type=int, default=0)
+        return parser
+
+    def __init__(self,args):
+        super().__init__()
+
+        self.hashedMLP = HashedMLP(args.n_input, args.n_output, args.n_hidden, \
+                                args.n_layers, args.n_entries, args.n_feature, \
+                                args.base_grids, args.n_level, args.n_factor, \
+                                args.n_auxin, nn.GLU())
+        self.learning_rate = args.learning_rate
+        self.weight_decay = args.weight_decay
+        self.step_size = args.step_size
+        self.gamma = args.gamma
+        self.loss = nn.MSELoss()
+        self.save_hyperparameters()
+
+    def forward(self,data):
+        return self.hashedMLP(data)
+
+    def training_step(self,batch,batch_idx):
+        tb = self.logger.experiment
+        x,y = batch
+        output = self(x)
+        loss = self.loss(output,y)
+        self.log('loss',loss)
+        return loss
+
+    def validation_step(self,batch,batch_idx):
+        x,y = batch
+        output = self(x)
+        val_loss = self.loss(output,y)
+        self.log('val_loss',val_loss)
+        return val_loss
+
+    def configure_optimizers(self):
+        optimizers = torch.optim.Adam(list(self.timeNet.parameters())+list(self.spatialNet.parameters()), lr=self.learning_rate,weight_decay=self.weight_decay)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizers, step_size=self.step_size, gamma=self.gamma)
+        return [optimizers],[scheduler]
