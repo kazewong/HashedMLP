@@ -2,6 +2,8 @@ import h5py
 import torch
 from torch.utils.data import Dataset
 
+from pytorch_lightning import LightningDataModule
+
 class GridDataset(Dataset):
 
     def __init__(self, data_file, keys,stride= 1):
@@ -29,3 +31,23 @@ class GridDataset(Dataset):
 
     def __getitem__(self, idx):
         return self.coord[idx],self.data[idx]
+
+class GridDataModule(LightningDataModule):
+    def __init__(self, data_file, keys,stride= 1, batch_size=1024,num_workers=0):
+        super().__init__()
+        self.data_file = data_file
+        self.keys = keys
+        self.stride = stride
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+
+    def setup(self, stage=None):
+        dataset = GridDataset(self.data_file, self.keys, self.stride)
+        length = torch.tensor([int(dataset.__len__()*0.8),dataset.__len__()-int(dataset.__len__()*0.8)])
+        self.train_data, self.val_data = torch.utils.data.random_split(dataset, length)
+
+    def train_dataloader(self):
+        return torch.utils.data.DataLoader(self.train_data, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
+
+    def val_dataloader(self):
+        return torch.utils.data.DataLoader(self.val_data, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers)

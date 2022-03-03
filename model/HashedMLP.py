@@ -127,18 +127,17 @@ class HashedMLP(nn.Module):
 
 ### Model in pytorch lightning
 
-class HashedInterpolator(pl.LightningModule):
+class HashedMLP_lightning(pl.LightningModule):
     
     @staticmethod
     def specific_args(parent_parser):
         parser = ArgumentParser(parents=[parent_parser], add_help=False)
-        parser.add_argument('--n_layers', type=int)
+        parser.add_argument('--n_input', type=int)
+        parser.add_argument('--n_output', type=int)
         parser.add_argument('--learning_rate', type=float)
         parser.add_argument('--weight_decay', type=float,default=1e-4)
         parser.add_argument('--step_size', type=float, default=1)
         parser.add_argument('--gamma', type=float, default=0.5)
-        parser.add_argument('--n_input', type=int)
-        parser.add_argument('--n_output', type=int)
         parser.add_argument('--n_hidden', type=int, default=64)
         parser.add_argument('--n_layers', type=int, default=2)
         parser.add_argument('--n_entries', type=int, default=2**20)
@@ -155,7 +154,7 @@ class HashedInterpolator(pl.LightningModule):
         self.hashedMLP = HashedMLP(args.n_input, args.n_output, args.n_hidden, \
                                 args.n_layers, args.n_entries, args.n_feature, \
                                 args.base_grids, args.n_level, args.n_factor, \
-                                args.n_auxin, nn.GLU())
+                                args.n_auxin, nn.ReLU())
         self.learning_rate = args.learning_rate
         self.weight_decay = args.weight_decay
         self.step_size = args.step_size
@@ -182,6 +181,6 @@ class HashedInterpolator(pl.LightningModule):
         return val_loss
 
     def configure_optimizers(self):
-        optimizers = torch.optim.Adam(list(self.timeNet.parameters())+list(self.spatialNet.parameters()), lr=self.learning_rate,weight_decay=self.weight_decay)
+        optimizers = torch.optim.Adam(self.hashedMLP.parameters(), lr=self.learning_rate, betas=(0.9,0.99), eps=1e-8,weight_decay=self.weight_decay)
         scheduler = torch.optim.lr_scheduler.StepLR(optimizers, step_size=self.step_size, gamma=self.gamma)
         return [optimizers],[scheduler]

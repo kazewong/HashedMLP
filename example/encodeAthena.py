@@ -9,18 +9,19 @@ import copy
 from sklearn.preprocessing import StandardScaler,QuantileTransformer
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader,random_split
+from tqdm import tqdm
 
 n_input = 3
 n_output = 3
 n_hidden = 64
 n_layers = 2
-n_entries = 2**24
+n_entries = 2**25
 n_feature = 2
 base_grids = torch.tensor([16,16,16]).cuda()
-n_level = 16
+n_level = 13
 n_factor = 1.5
 n_auxin = 0
-act = nn.ReLU()
+act = nn.Softplus()
 model = HashedMLP(n_input, n_output, n_hidden, n_layers, n_entries, n_feature, base_grids, n_level, n_factor, n_auxin, act)
 position = torch.rand(100,3).cuda()
 
@@ -64,10 +65,12 @@ val_length = val_data[0].shape[0]
 best_train_loss = 1e10
 best_val_loss = 1e10
 
-def train(epoch):
+print("Start training")
+for epoch in range(n_epoch):
+    print("Epoch: ",epoch)
     model.train()
     running_loss = 0.0
-    for i in range(0,train_length,batch_size):
+    for i in tqdm(range(0,train_length,batch_size)):
         optimizer.zero_grad()
         coord = train_data[0][i:i+batch_size]
         data = train_data[1][i:i+batch_size]
@@ -76,36 +79,28 @@ def train(epoch):
         loss_value.backward()
         optimizer.step()
         running_loss += loss_value.item()
-        if i == int(train_data.__len__()/batch_size)*batch_size:
+        if i == int(train_length/batch_size)*batch_size:
             if epoch % verbose_epoch == 0:
-                print('training loss: %.3f' % (running_loss*batch_size/train_data.__len__()))
+                print('training loss: %.3f' % (running_loss*batch_size/train_length))
             torch.save(model.module.state_dict(), './checkpoint/Athena_'+tag+'_e'+str(int(np.log2(n_entries)))+'_l'+str(n_level)+'_train.pth')
-            writer.add_scalar('loss/train', running_loss/train_data.__len__(), i)
+            writer.add_scalar('loss/train', running_loss/train_length, i)
             running_loss = 0.0
-
-def validate(epoch):
-    model.eval()
-    running_loss = 0.0
-    with torch.no_grad():
-        for i in range(0,val_length,batch_size):
-            coord, data = val_data[i:i+batch_size]
-            output = model(coord)
-            loss_value = loss(output,data.to(device))
-            running_loss += loss_value.item()
-            if i == int(val_data.__len__()/batch_size)*batch_size:
-                if epoch % verbose_epoch == 0:
-                    print('validation loss: %.3f' % (running_loss*batch_size/val_data.__len__()))
-                torch.save(model.module.state_dict(), './checkpoint/Athena_'+tag+'_e'+str(int(np.log2(n_entries)))+'_l'+str(n_level)+'_val.pth')
-                writer.add_scalar('loss/val', running_loss/val_data.__len__(), i)
-                running_loss = 0.0
-
-
-print("Start training")
-for epoch in range(n_epoch):
-    print("Epoch: ",epoch)
-    train(epoch)
     if epoch%2 == 0:
-        validate(epoch)
+        model.eval()
+        running_loss = 0.0
+        with torch.no_grad():
+            for i in tqdm(range(0,val_length,batch_size)):
+                coord = val_data[0][i:i+batch_size]
+                data = val_data[1][i:i+batch_size]
+                output = model(coord)
+                loss_value = loss(output,data.to(device))
+                running_loss += loss_value.item()
+                if i == int(val_length/batch_size)*batch_size:
+                    if epoch % verbose_epoch == 0:
+                        print('validation loss: %.3f' % (running_loss*batch_size/val_length))
+                    torch.save(model.module.state_dict(), './checkpoint/Athena_'+tag+'_e'+str(int(np.log2(n_entries)))+'_l'+str(n_level)+'_val.pth')
+                    writer.add_scalar('loss/val', running_loss/val_length, i)
+                    running_loss = 0.0
 
 # pred = []
 # for i in range(0,data.shape[0],batch_size):
