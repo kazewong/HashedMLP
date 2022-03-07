@@ -1,6 +1,6 @@
 import h5py
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, SequentialSampler, BatchSampler
 
 from pytorch_lightning import LightningDataModule
 
@@ -39,7 +39,6 @@ class GridDataModule(LightningDataModule):
         self.keys = keys
         self.stride = stride
         self.batch_size = batch_size
-        self.num_workers = num_workers
 
     def setup(self, stage=None):
         dataset = GridDataset(self.data_file, self.keys, self.stride)
@@ -47,7 +46,9 @@ class GridDataModule(LightningDataModule):
         self.train_data, self.val_data = torch.utils.data.random_split(dataset, length)
 
     def train_dataloader(self):
-        return torch.utils.data.DataLoader(self.train_data, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
+        sampler = BatchSampler(SequentialSampler(self.train_data), self.batch_size, drop_last=False)
+        return torch.utils.data.DataLoader(self.train_data, batch_size=None, sampler=sampler)
 
     def val_dataloader(self):
-        return torch.utils.data.DataLoader(self.val_data, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers)
+        sampler = BatchSampler(SequentialSampler(self.val_data), self.batch_size, drop_last=False)
+        return torch.utils.data.DataLoader(self.val_data, batch_size=self.batch_size, shuffle=False)
