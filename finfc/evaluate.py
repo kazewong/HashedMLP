@@ -15,9 +15,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-from cosmology.data import properties
-
-from . import train
+from . import properties, train
 
 
 def make_sample_grid(grid: Sequence[int], box: Sequence[float]=None, device=None) -> torch.Tensor:
