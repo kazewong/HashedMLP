@@ -1,0 +1,6 @@
+hydra-core==1.1.1
+omegaconf==2.1.1
+optuna==2.10.0
+pytorch-lightning==1.5.10
+torch-tb-profiler==0.3.1
+torchmetrics==0.7.2
