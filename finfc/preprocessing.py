@@ -89,14 +89,15 @@ def interpolate_piecewise_linear(x: torch.Tensor, xp: torch.Tensor, fp: torch.Te
     It evaluates a piecewise linear function defined implicitly by its value `fp`
     at locations `xp`.
     """
-    slope = fp.diff().div_(xp.diff())
+    slope = fp.new_zeros(len(fp) + 1)
+    slope[1:-1] = fp.diff().div_(xp.diff())
 
-    buckets = torch.bucketize(x, xp).sub_(1).clamp_(min=0, max=len(fp) - 2)
+    buckets = torch.bucketize(x, xp)
+    x_slope = slope[buckets]
 
+    buckets.sub_(1)
     x_lb = xp[buckets]
     f_lb = fp[buckets]
-
-    x_slope = slope[buckets]
 
     if x.requires_grad:
         return x.sub(x_lb).mul(x_slope).add(f_lb)
