@@ -15,12 +15,12 @@ class ComposePreprocessor(torch.nn.Module):
         super().__init__()
         self.transforms = torch.nn.ModuleList(transforms)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         for transform in reversed(self.transforms):
             x = transform(x)
         return x
 
-    def preprocess(self, x):
+    def preprocess(self, x: torch.Tensor) -> torch.Tensor:
         for transform in self.transforms:
             x = transform.preprocess(x)
         return x
@@ -73,8 +73,9 @@ class LazyRescalePreprocessor(torch.nn.Module):
         return x.mul(a).add(b)
 
     def preprocess(self, y: torch.Tensor) -> torch.Tensor:
-        self.min_value.copy_(y.min())
-        self.max_value.copy_(y.max())
+        if self.training:
+            self.min_value.copy_(y.min())
+            self.max_value.copy_(y.max())
 
         a = (self.output_max - self.output_min) / (self.max_value - self.min_value)
         b = self.output_min - a * self.min_value
@@ -136,19 +137,20 @@ class LazyLinearQuantilePreprocessor(torch.nn.Module):
         return interpolate_piecewise_linear(x, self.breakpoints, self.quantiles)
 
     def preprocess(self, y: torch.Tensor) -> torch.Tensor:
-        y_flat = y.view(-1)
+        if self.training:
+            y_flat = y.view(-1)
 
-        num_sample_points = min(2 ** 16, len(y_flat))
-        sample_idx = torch.randint(0, len(y_flat), (num_sample_points,))
-        sample_y = y_flat[sample_idx]
+            num_sample_points = min(2 ** 16, len(y_flat))
+            sample_idx = torch.randint(0, len(y_flat), (num_sample_points,))
+            sample_y = y_flat[sample_idx]
 
-        # Set quantiles to the values computed from the sample.
-        quantile_probs = torch.linspace(0, 1, len(self.quantiles), device=y.device, dtype=y.dtype)[1:-1]
-        self.quantiles[1:-1] = torch.quantile(sample_y, quantile_probs)
+            # Set quantiles to the values computed from the sample.
+            quantile_probs = torch.linspace(0, 1, len(self.quantiles), device=y.device, dtype=y.dtype)[1:-1]
+            self.quantiles[1:-1] = torch.quantile(sample_y, quantile_probs)
 
-        # Do not sample minimum and maximum values
-        self.quantiles[0] = torch.min(y)
-        self.quantiles[-1] = torch.max(y)
+            # Do not sample minimum and maximum values
+            self.quantiles[0] = torch.min(y)
+            self.quantiles[-1] = torch.max(y)
 
         return interpolate_piecewise_linear(y, self.quantiles, self.breakpoints)
 

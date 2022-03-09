@@ -98,7 +98,7 @@ class NeuralFieldModel(pytorch_lightning.LightningModule):
         else:
             self.field = None
 
-        self.l1_loss = torch.nn.L1Loss()
+        self.l1_metric = torchmetrics.MeanAbsoluteError()
         self.psnr = torchmetrics.image.psnr.PeakSignalNoiseRatio(data_range=2)
 
         self.automatic_optimization = False
@@ -151,11 +151,12 @@ class NeuralFieldModel(pytorch_lightning.LightningModule):
         self.log('train_loss', loss.detach(), prog_bar=True)
 
         with torch.no_grad():
-            l1 = self.l1_loss(predicted, y)
+            l1 = self.l1_metric(predicted, y)
             self.log('l1', l1, prog_bar=True)
+            self.log('metrics/l1', self.l1_metric, on_step=False, on_epoch=True)
 
             self.psnr(predicted, y)
-            self.log('psnr', self.psnr)
+            self.log('metrics/psnr', self.psnr)
 
         return loss
 

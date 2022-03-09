@@ -175,6 +175,7 @@ class CrossEntropyRegressionLoss(AbstractLoss):
         y_true = torch.as_tensor(y_true)
         grid = torch.linspace(self.lower, self.upper, self.num_grid, dtype=y_true.dtype, device=y_true.device)
         insert_idx = torch.searchsorted(grid, y_true, right=True).sub_(1).clamp_(0, self.num_grid - 2)
+
         one_hot_left = torch.nn.functional.one_hot(insert_idx, num_classes=self.num_grid)
         one_hot_right = torch.nn.functional.one_hot(insert_idx + 1, num_classes=self.num_grid)
 

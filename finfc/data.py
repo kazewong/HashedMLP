@@ -49,7 +49,13 @@ class FieldIndexDataset(torch.utils.data.Dataset[Tuple[torch.Tensor, torch.Tenso
             idx = np.asarray(idx)
 
         multi_idx = np.stack(np.unravel_index(idx, self._shape), axis=-1)
-        multi_idx = multi_idx * self._grid_ratio
+
+        multi_idx = multi_idx.astype(np.float32)
+
+        # Adjust pixel center
+        multi_idx += 0.5
+        # Convert from pixel coordinates to grid coordinates
+        multi_idx *= self._grid_ratio
 
         return torch.from_numpy(multi_idx), torch.as_tensor(idx)
 

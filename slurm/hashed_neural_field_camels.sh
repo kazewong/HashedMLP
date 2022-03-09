@@ -5,7 +5,7 @@
 #SBATCH -c 8
 #SBATCH --mem=60G
 #SBATCH --gpus=1
-#SBATCH --constraint=v100|a100
+#SBATCH --constraint=a100|v100-32gb
 #SBATCH --time=2:00:00
 
 set -e
@@ -23,7 +23,7 @@ singularity run --nv --containall --writable-tmpfs -B $HOME/.ssh -B $PWD -B /mnt
     python -m finfc.train hydra.run.dir="${OUTPUT_PATH}/train" \
         data.path=${DATA_PATH} data.transform=log data.normalize=$NORMALIZATION data.num_workers=4 \
         model.hash.num_entries_log2=${HASHTABLE_SIZE_LOG2} \
-        batch_size=$((2 ** 20)) max_epochs=${EPOCHS}
+        batch_size=$((2 ** 20)) max_epochs=${EPOCHS} loss=cross_entropy
 
 singularity run --nv --containall --writable-tmpfs -B $HOME/.ssh -B $PWD -B /mnt/ceph/users --pwd $PWD $IMAGE \
     python -m finfc.evaluate hydra.run.dir="${OUTPUT_PATH}/evaluate" \

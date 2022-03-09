@@ -2,6 +2,7 @@
 """
 
 from __future__ import annotations
+import copy
 import dataclasses
 import functools
 import logging
@@ -80,6 +81,15 @@ def plot_field_difference(slice_compressed, slice_ref):
     return fig
 
 
+def compute_l1_difference(field: torch.Tensor, reference: torch.Tensor, preprocessor: Callable[[torch.Tensor], torch.Tensor]) -> torch.Tensor:
+    with torch.no_grad():
+        field_p = preprocessor(field)
+        reference_p = preprocessor(reference)
+        l1 = torch.nn.functional.l1_loss(field_p, reference_p)
+
+    return l1
+
+
 @dataclasses.dataclass
 class EvaluationConfig:
     checkpoint_path: str = omegaconf.MISSING
@@ -92,7 +102,7 @@ class EvaluationConfig:
 def main(config: EvaluationConfig):
     logger = logging.getLogger(__name__)
 
-    model = train.NeuralFieldModel.load_from_checkpoint(
+    model: train.NeuralFieldModel = train.NeuralFieldModel.load_from_checkpoint(
         hydra.utils.to_absolute_path(config.checkpoint_path))
 
     reference_path = hydra.utils.to_absolute_path(model.hparams.data.path)
@@ -128,6 +138,12 @@ def main(config: EvaluationConfig):
     with torch.no_grad():
         field = sample_field(functools.partial(model, normalized=False), grid_size, box=box_size, device=device)
         field = field.cpu()
+
+    l1 = compute_l1_difference(
+        field,
+        torch.from_numpy(data_ref),
+        copy.deepcopy(model.preprocessor).cpu().preprocess)
+    logging.info('Average L1 difference: %f', l1.item())
 
     ps = properties.power_spectrum(field, boxsize=config.boxsize)
 

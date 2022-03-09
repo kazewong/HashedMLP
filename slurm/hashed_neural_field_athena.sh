@@ -5,7 +5,7 @@
 #SBATCH -c 8
 #SBATCH --mem=60G
 #SBATCH --gpus=1
-#SBATCH --constraint=v100|a100
+#SBATCH --constraint=a100|v100-32gb
 #SBATCH --time=2:00:00
 
 set -e
