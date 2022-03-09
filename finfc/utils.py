@@ -50,20 +50,3 @@ def create_trainer(config: _configs.BaseTrainingConfig, callbacks: list=None, kw
         _kwargs.update(kwargs)
 
     return pytorch_lightning.Trainer(**_kwargs)
-
-
-class ElasticNetLoss(torch.nn.Module):
-    def __init__(self, l1_ratio: float=0.5, reduction: str='mean'):
-        super().__init__()
-
-        if l1_ratio < 0.0 or l1_ratio > 1.0:
-            raise ValueError('l1_ratio must be in [0, 1]')
-
-        self.l1_ratio = l1_ratio
-        self.mse_loss = torch.nn.MSELoss(reduction=reduction)
-        self.l1_loss = torch.nn.L1Loss(reduction=reduction)
-
-    def forward(self, input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        mse_loss = self.mse_loss(input, target)
-        l1_loss = self.l1_loss(input, target)
-        return mse_loss.mul(1 - self.l1_ratio).add_(l1_loss, alpha=self.l1_ratio)
