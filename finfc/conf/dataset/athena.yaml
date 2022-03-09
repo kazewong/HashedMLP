@@ -1,0 +1,7 @@
+# @package _global_
+
+data:
+  path: /mnt/ceph/users/wwong/Simulations/AstroSimChallenge/Athena/mixing_layer.hdf5
+  key: rho
+  num_channels: 1
+ 

@@ -11,7 +11,7 @@
 set -e
 
 DATA_PATH="/mnt/ceph/users/wzhou/projects/fi-cosmology/data/compression/athena/rho_1024.npy"
-OUTPUT_PATH="/mnt/ceph/users/${USER}/projects/fi-cosmology/outputs/compression/hashed_neural_field/athena/$SLURM_JOB_ID"
+OUTPUT_PATH="/mnt/ceph/users/${USER}/projects/finfc/outputs/compression/hashed_neural_field/athena/$SLURM_JOB_ID"
 IMAGE="/mnt/ceph/users/wzhou/images/cosmology.sif"
 NORMALIZATION=${NORMALIZATION:-linear}
 HASHTABLE_SIZE_LOG2=${HASHTABLE_SIZE_LOG2:-24}
@@ -19,6 +19,7 @@ EPOCHS=${EPOCHS:-60}
 
 module load singularity
 
+mkdir -p $OUTPUT_PATH
 singularity run --nv --containall --writable-tmpfs -B $HOME/.ssh -B $PWD -B /mnt/ceph/users --pwd $PWD $IMAGE \
     python -m finfc.train hydra.run.dir="${OUTPUT_PATH}/train" \
         data.path=${DATA_PATH} data.normalize=$NORMALIZATION data.num_workers=4 \

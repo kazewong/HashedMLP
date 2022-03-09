@@ -224,7 +224,8 @@ class NeuralFieldDataModule(pytorch_lightning.LightningDataModule):
         if self._dataset is not None:
             return
 
-        self.field = torch.from_numpy(np.load(self.hparams.path))
+        self.field = utils.load_data(self.hparams.path, self.hparams.key)
+        self.field = utils.ensure_channels(self.field, self.hparams.num_channels)
 
         if self.box_size is None:
             field_shape = np.array(self.field.shape[:-1])
@@ -275,7 +276,7 @@ class NeuralFieldDataModule(pytorch_lightning.LightningDataModule):
         return dataloader
 
 
-@hydra.main(config_name='config', config_path=None)
+@hydra.main(config_name='config', config_path='conf')
 def main(config: TrainingConfig):
     config.data.path = hydra.utils.to_absolute_path(config.data.path)
 

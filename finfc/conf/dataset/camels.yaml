@@ -1,0 +1,6 @@
+# @package _global_
+
+data:
+  path: /mnt/ceph/users/wzhou/projects/fi-cosmology/data/compression/CAMELS/mass_512.npy
+  transform: log
+  num_channels: 1

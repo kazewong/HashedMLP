@@ -96,6 +96,9 @@ class DataConfig:
     ----------
     path : str
         Path to a numpy data file containing the field to compress
+    key : str, optional
+        If not `None`, a key which specifies which array to load from the data file.
+        Useful for loading from `.npz` or `.h5` files.
     num_channels : int, optional
         The number of channels present in the data.
     batches_per_epoch: int, optional
@@ -112,7 +115,8 @@ class DataConfig:
             the string is parsed to obtain the number of quantiles.
             E.g. specify 'quantile_8' for 8 quantiles.
     """
-    path: str = '/home/wzhou/data/fields/camels_IllustrisTNG/snapshot0_lmass.npy'
+    path: str = omegaconf.MISSING
+    key: Optional[str] = None
     num_channels: Optional[int] = None
     batches_per_epoch: Optional[int] = None
     num_workers: int = 16
@@ -124,7 +128,7 @@ class DataConfig:
 class BaseTrainingConfig:
     gpus: int = 1
     precision: str = '32'
-    batch_size: int = 2 ** 16
+    batch_size: int = 2 ** 20
     max_epochs: int = 100
     lightning: Dict[str, Any] = dataclasses.field(default_factory=dict)
 
