@@ -25,7 +25,7 @@ def make_sample_grid(grid: Sequence[int], box: Sequence[float]=None, device=None
     if box is None:
         box = [1.0] * len(grid)
 
-    samples = [torch.linspace(0, b, steps=g + 2, device=device)[1:-1] for b, g in zip(box, grid)]
+    samples = [torch.arange(g, device=device, dtype=torch.float32).add_(0.5).mul_(b / g) for b, g in zip(box, grid)]
     return torch.cartesian_prod(*samples)
 
 
