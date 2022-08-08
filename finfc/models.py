@@ -2,6 +2,7 @@
 """
 
 from __future__ import annotations
+import math
 from typing import Collection, Union, Sequence
 
 import torch
@@ -226,3 +227,85 @@ class MultigridInterpolator(torch.nn.Module):
 
     def __call__(self, x: torch.Tensor) -> torch.Tensor:
         return super().__call__(x)
+
+
+class TCNNMultigridInterpolator(torch.nn.Module):
+    """Multi-grid interpolator based on tiny-cuda-nn library.
+
+    This module implements a multi-grid interpolator.
+    For a given position it queries a set of interpolators at different resolutions,
+    and stacks the obtained values.
+
+    This module requires the tiny-cuda-nn library to be installed.
+    It is an order of magnitude faster than the pytorch implementation.
+    """
+    scale: torch.Tensor
+
+    def __init__(self, levels: int, entries_per_level: int, base_grid: Collection[int], final_grid: Collection[int], box_size: Collection[float]=None,
+                 features: int=2, max_norm: float=None, norm_type: float=2, sparse: bool=False):
+        """Create a new multi-grid interpolator.
+
+        Parameters
+        ----------
+        levels : int
+            Number of levels of the multi-grid.
+        entries_per_level : int
+            Maximum number of entries per level. This class automatically switches between a dense grid
+            and a hashed grid representation when the number of entries for a dense grid exceeds this value.
+        base_grid : Collection[int]
+            A list of integers representing the size of the base grid (i.e. the number of grid cells
+            at the coarsest subdivision).
+        final_grid : Collection[int]
+            A list of integers representing the size of the final grid (i.e. the number of grid cells
+            at the finest subdivision). Must be of the same length as `base_grid`.
+        box_size : Collection[float], optional
+            If not `None`, a list of float representing the extent of the box in each dimension.
+            Must be of the same length as `base_grid`. Otherwise, the box size is assumed to be 1
+            in all dimensions.
+        features : int
+            Dimension of the feature space.
+        max_norm : float, optional
+            If not `None`, embedding values at each grid will be rescaled to have a maximum norm of `max_norm`.
+        norm_type : float, optional
+            The p of p-norm to compute for the max-norm option.
+        sparse : bool, optional
+            If `True`, indicates that sparse gradients should be used for hashed embeddings.
+        """
+        super().__init__()
+        import tinycudann as tcnn
+
+        base_grid_t = torch.as_tensor(base_grid)
+        final_grid_t = torch.as_tensor(final_grid)
+        factor = torch.exp((final_grid_t.log() - base_grid_t.log()) / (levels - 1))
+
+        if torch.unique(base_grid_t).size(0) != 1:
+            raise ValueError("Grid must have same extent in all dimensions")
+
+        self.encoding = tcnn.Encoding(len(base_grid_t), {
+            'otype': 'Grid',
+            'type': 'Hash',
+            'n_levels': levels,
+            'n_features_per_level': features,
+            'log2_hashmap_size': int(math.ceil(math.log2(entries_per_level))),
+            'base_resolution': int(base_grid[0]),
+            'per_level_scale': float(factor[0]),
+            'interpolation': 'linear',
+        }, dtype=torch.float32)
+
+        if box_size is None:
+            box_size = torch.ones(len(base_grid_t), dtype=torch.float32)
+        else:
+            box_size = torch.as_tensor(box_size)
+
+        scale = 1 / box_size
+
+        self.register_buffer('scale', scale)
+
+    def forward(self, x: torch.Tensor):
+        # Note: native encoding module may convert type on call
+        # We convert it back to the original type on return
+        return self.encoding(x * self.scale).to(dtype=x.dtype)
+
+    @property
+    def output_dim(self) -> int:
+        return self.encoding.n_output_dims

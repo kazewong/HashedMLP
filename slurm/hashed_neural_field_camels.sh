@@ -10,7 +10,6 @@
 
 set -e
 
-DATA_PATH="/mnt/ceph/users/wzhou/projects/fi-cosmology/data/compression/CAMELS/mass_512.npy"
 OUTPUT_PATH="/mnt/ceph/users/${USER}/projects/finfc/outputs/compression/hashed_neural_field/camels/$SLURM_JOB_ID"
 IMAGE="/mnt/ceph/users/wzhou/images/cosmology.sif"
 NORMALIZATION=${NORMALIZATION:-quantile_8}
@@ -22,9 +21,9 @@ module load singularity
 mkdir -p $OUTPUT_PATH
 singularity run --nv --containall --writable-tmpfs -B $HOME/.ssh -B $PWD -B /mnt/ceph/users --pwd $PWD $IMAGE \
     python -m finfc.train hydra.run.dir="${OUTPUT_PATH}/train" \
-        data.path=${DATA_PATH} data.transform=log data.normalize=$NORMALIZATION data.num_workers=4 \
+        +dataset=camels data.normalize=$NORMALIZATION data.num_workers=4 \
         model.hash.num_entries_log2=${HASHTABLE_SIZE_LOG2} \
-        batch_size=$((2 ** 20)) max_epochs=${EPOCHS} loss=cross_entropy
+        batch_size=$((2 ** 20)) max_epochs=${EPOCHS} loss=l1
 
 singularity run --nv --containall --writable-tmpfs -B $HOME/.ssh -B $PWD -B /mnt/ceph/users --pwd $PWD $IMAGE \
     python -m finfc.evaluate hydra.run.dir="${OUTPUT_PATH}/evaluate" \

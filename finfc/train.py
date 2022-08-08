@@ -75,7 +75,7 @@ class NeuralFieldModel(pytorch_lightning.LightningModule):
 
         self.criterion: prediction.AbstractLoss = hydra.utils.instantiate(config.loss)
 
-        self.featurization = models.MultigridInterpolator(
+        self.featurization = models.TCNNMultigridInterpolator(
             levels=config.model.hash.num_levels,
             entries_per_level=2 ** config.model.hash.num_entries_log2,
             base_grid=config.model.hash.base_grid,

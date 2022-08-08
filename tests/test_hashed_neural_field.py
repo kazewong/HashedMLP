@@ -4,8 +4,8 @@ import numpy as np
 import pytest
 import torch
 
-from cosmology.models.compression.hashed_neural_field import models
-from cosmology.models.compression.hashed_neural_field import preprocessing
+from finfc import models
+from finfc import preprocessing
 
 
 def test_interpolator_with_hashed_grid():
