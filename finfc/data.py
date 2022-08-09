@@ -80,37 +80,54 @@ class FastRandomSampler(torch.utils.data.Sampler[torch.Tensor], torch.utils.data
     obvious block artifacts).
 
     """
-    def __init__(self, blocks: Collection[int], batch_size: int, generator: torch.Generator=None):
+    def __init__(self, blocks: Collection[int], batch_size: int, epoch_unroll: int = 1, generator: torch.Generator=None):
+        """Create a new `FastRandomSampler`.
+
+        Parameters
+        ----------
+        blocks : Collection[int]
+            Shape of the grid in each dimension.
+        batch_size : int
+            Size of the batch to sample.
+        epoch_unroll : int
+            Number of times to unroll the sampler by. This will effectively treat one epoch
+            of the sampler as several epochs of the underlying dataset. This can be useful
+            if the cost of restarting the epoch is large.
+        """
+
         self._numel = int(torch.prod(torch.tensor(blocks)))
         self._len = self._numel // batch_size
 
         self.generator = generator
         self._blocks = blocks
         self._strides = _compute_strides(blocks)
+        self._idxs = [np.unravel_index(np.arange(i * batch_size, (i + 1) * batch_size), blocks) for i in range(self._len)]
 
         self.batch_size = batch_size
+        self.epoch_unroll = epoch_unroll
 
         if self._numel & (self._numel - 1) != 0:
             # length is not power of 2
             raise ValueError('Total length must be a power of 2!')
 
     def __len__(self):
-        return self._len
+        return self._len * self.epoch_unroll
 
     def __iter__(self):
         # Powers of 5 are units of Z / 2^n Z, so we can use a random such power to generate
         # a global bijection of Z / 2^n Z onto itself through multiplication.
         # We use this to avoid obvious blocking patterns in the sample, so that the linear index does
         # not align directly with the original grid.
-        exponent = int(torch.randint(self._numel, tuple(), generator=self.generator))
-        bijection = pow(5, exponent, self._numel)
+        for _ in range(self.epoch_unroll):
+            exponent = int(torch.randint(self._numel, tuple(), generator=self.generator))
+            bijection = pow(5, exponent, self._numel)
 
-        block_perms = [torch.randperm(b, generator=self.generator) for b in self._blocks]
+            block_perms = [torch.randperm(b, generator=self.generator) for b in self._blocks]
 
-        for i in range(self._len):
-            idxs = np.unravel_index(np.arange(i * self.batch_size, (i + 1) * self.batch_size), self._blocks)
-            multi_idx = [b[i] for b, i in zip(block_perms, idxs)]
-            linear_idx = sum(s * i for s, i in zip(self._strides, multi_idx))
-            linear_idx *= bijection
-            linear_idx %= self._numel
-            yield linear_idx
+            for i in range(self._len):
+                idxs = self._idxs[i]
+                multi_idx = [b[i] for b, i in zip(block_perms, idxs)]
+                linear_idx = sum(s * i for s, i in zip(self._strides, multi_idx))
+                linear_idx *= bijection
+                linear_idx %= self._numel
+                yield linear_idx

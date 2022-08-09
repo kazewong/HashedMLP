@@ -128,7 +128,7 @@ class DataConfig:
 class BaseTrainingConfig:
     gpus: int = 1
     precision: str = '32'
-    batch_size: int = 2 ** 20
+    batch_size: int = 2 ** 22
     max_epochs: int = 100
     lightning: Dict[str, Any] = dataclasses.field(default_factory=dict)
 

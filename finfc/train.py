@@ -101,8 +101,6 @@ class NeuralFieldModel(pytorch_lightning.LightningModule):
         self.l1_metric = torchmetrics.MeanAbsoluteError()
         self.psnr = torchmetrics.image.psnr.PeakSignalNoiseRatio(data_range=2)
 
-        self.automatic_optimization = False
-
     def _evaluate_field(self, x: torch.Tensor):
         with torch.autograd.profiler.record_function("hash_features"):
             features = self.featurization(x)
@@ -122,8 +120,6 @@ class NeuralFieldModel(pytorch_lightning.LightningModule):
         return values
 
     def training_step(self, batch, batch_idx):
-        optimizers = self.optimizers()
-
         x, y = batch
         output = self._evaluate_field(x)
 
@@ -131,23 +127,6 @@ class NeuralFieldModel(pytorch_lightning.LightningModule):
             y = self.field[y]
 
         loss, predicted = self.criterion(output, self.criterion.preprocess(y))
-
-        for opt in optimizers:
-            opt.zero_grad(set_to_none=True)
-        self.manual_backward(loss)
-
-        if self.hparams.optim.normalize_interpolator_gradient:
-            for n, p in self.featurization.named_parameters():
-                if p.requires_grad:
-                    grad_norm = p.grad.norm()
-                    p.grad.div_(grad_norm)
-                    self.log('grad_norm/' + n, grad_norm.detach())
-
-        for opt in optimizers:
-            opt.step()
-        for sched in self.lr_schedulers():
-            sched.step()
-
         self.log('train_loss', loss.detach(), prog_bar=True)
 
         with torch.no_grad():
@@ -172,22 +151,13 @@ class NeuralFieldModel(pytorch_lightning.LightningModule):
 
         self.logger.experiment.add_image('slice', image, self.trainer.global_step, dataformats='HWC')
 
-    def _make_optimizer_interpolator(self, batches_per_epoch: int):
-        optim = torch.optim.SGD(self.featurization.parameters(), lr=self.hparams.optim.lr_interpolator, momentum=0.9, nesterov=True)
-        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, self.hparams.max_epochs * batches_per_epoch)
-        return {'optimizer': optim, 'lr_scheduler': lr_scheduler}
-
-    def _make_optimizer_mlp(self, batches_per_epoch: int):
-        optim = torch.optim.Adam(self.mlp.parameters(), lr=self.hparams.optim.lr_mlp)
-        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, self.hparams.max_epochs * batches_per_epoch, eta_min=0.0)
-        return {'optimizer': optim, 'lr_scheduler': lr_scheduler}
-
     def configure_optimizers(self):
-        if self.hparams.model.sparse:
-            raise NotImplementedError("Sparse gradients not implemented.")
-        return [
-            self._make_optimizer_interpolator(self.hparams.data.batches_per_epoch),
-            self._make_optimizer_mlp(self.hparams.data.batches_per_epoch)]
+        optim = torch.optim.AdamW(self.parameters(), lr=self.hparams.optim.lr_mlp)
+        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optim,
+            self.hparams.max_epochs * self.hparams.data.batches_per_epoch,
+            eta_min=0.0)
+        return {'optimizer': optim, 'lr_scheduler': {'scheduler': lr_scheduler, 'interval': 'step'}}
 
 
 def _make_normalize_preprocessor_config(normalize: Optional[str]=None):
@@ -203,6 +173,14 @@ def _make_normalize_preprocessor_config(normalize: Optional[str]=None):
 
     raise ValueError(f"Unknown normalization type: {normalize}")
 
+
+def _set_torch_workers(_):
+    # Reset number of worker threads for pytorch in dataloader.
+    # Our dataloader actually benefits from pytorch CPU parallelization,
+    # but by default it is disabled in dataloaders.
+    #
+    # We reset it here in order to keep up with the GPU.
+    torch.set_num_threads(8)
 
 class NeuralFieldDataModule(pytorch_lightning.LightningDataModule):
     hparams: DataConfig
@@ -262,8 +240,12 @@ class NeuralFieldDataModule(pytorch_lightning.LightningDataModule):
         # We need a dataloader for our sampler!
         # The sampler is a bit computationally expensive, so farming it to its own thread is beneficial
         sampler = torch.utils.data.DataLoader(
-            data.FastRandomSampler(self.field.shape[:-1], batch_size=self.batch_size),
-            batch_size=None, shuffle=False, num_workers=1, persistent_workers=True)
+            data.FastRandomSampler(self.field.shape[:-1], batch_size=self.batch_size, epoch_unroll=10),
+            batch_size=None,
+            shuffle=False,
+            num_workers=1,
+            persistent_workers=True,
+            worker_init_fn=_set_torch_workers)
 
         dataloader = torch.utils.data.DataLoader(
             self._dataset,
@@ -284,7 +266,7 @@ def main(config: TrainingConfig):
         save_top_k=1, every_n_epochs=config.max_epochs,
         filename='model')
 
-    trainer = utils.create_trainer(config, [ckpt_callback], {'log_every_n_steps': 2})
+    trainer = utils.create_trainer(config, [ckpt_callback], {'log_every_n_steps': 20, 'max_epochs': config.max_epochs // 10})
     dm = NeuralFieldDataModule(
         config.data, config.batch_size,
         box_size=config.model.hash.box_size)
